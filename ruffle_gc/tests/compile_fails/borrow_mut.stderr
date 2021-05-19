@@ -1,0 +1,11 @@
+error[E0502]: cannot borrow `ctx` as mutable because it is also borrowed as immutable
+  --> tests/compile_fails/borrow_mut.rs:16:33
+   |
+12 |     let s1 = root1.0.borrow(&ctx);
+   |                             ---- immutable borrow occurs here
+...
+16 |     let s2 = root2.0.borrow_mut(&mut ctx);
+   |                                 ^^^^^^^^ mutable borrow occurs here
+17 |
+18 |     println!("{}", s1);
+   |                    -- immutable borrow later used here

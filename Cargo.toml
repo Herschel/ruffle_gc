@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "ruffle_gc",
+    "ruffle_gc_derive",
+]
