@@ -1,4 +1,6 @@
-use crate::{Gc, GcData, GcDataPtr, GcFlags, GcLifetime, GcRootData, GcWeak, Trace, WeakId};
+use crate::{
+    Gc, GcData, GcDataPtr, GcFlags, GcLifetime, GcRoot, GcRootData, GcWeak, Trace, WeakId,
+};
 use generational_arena::Arena;
 use once_cell::unsync::OnceCell;
 use std::{cell::UnsafeCell, marker::PhantomData};
@@ -78,7 +80,7 @@ impl GcContext {
             // Mark
             let mut root = (*self.0).roots;
             while !root.is_null() {
-                ((*root).vtbl.trace)(&*(*root).value, self);
+                ((*root).vtbl.trace)(&*(*(root as *mut GcRoot<()>)).value.get(), self);
                 root = (*root).next;
             }
 

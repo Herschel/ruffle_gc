@@ -10,7 +10,6 @@ pub struct GcRootData {
     pub(crate) vtbl: GcVtbl,
     pub(crate) next: *mut GcRootData,
     pub(crate) prev: *mut GcRootData,
-    pub(crate) value: *mut (),
 }
 
 #[repr(C)]
@@ -29,7 +28,6 @@ impl<T> GcRoot<T> {
                 vtbl: T::vtbl(),
                 next: ptr::null_mut(),
                 prev: ptr::null_mut(),
-                value: ptr::null_mut(),
             },
             value: UnsafeCell::new(value.change_lifetime()),
         }
@@ -41,8 +39,6 @@ impl<T> GcRoot<T> {
         T: Trace,
     {
         unsafe {
-            let value_ptr = self.value.get() as *mut ();
-            self.inner.value = value_ptr;
             let ptr = &mut self.inner as *mut GcRootData;
             GcContext::get().insert_root(ptr);
             &*self.value.get()
@@ -69,8 +65,6 @@ impl<T> GcHeapRoot<T> {
         unsafe {
             let root_data = GcRoot::new(value);
             let mut boxed = Box::new(root_data);
-            let value_ptr: *mut () = boxed.value.get() as *mut ();
-            boxed.inner.value = value_ptr;
             let ptr = &mut boxed.inner as *mut GcRootData;
             GcContext::get().insert_root(ptr);
             GcHeapRoot(boxed)
