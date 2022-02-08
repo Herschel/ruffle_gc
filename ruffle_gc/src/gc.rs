@@ -119,6 +119,6 @@ pub struct GcData<T> {
 /// The virtual method table stored with garbage collected data.
 #[repr(C)]
 pub struct GcVtbl {
-    pub(crate) trace: unsafe fn(&(), &mut GcContext),
+    pub(crate) trace: unsafe fn(*const (), &mut GcContext),
     pub(crate) dealloc: unsafe fn(*mut ()),
 }

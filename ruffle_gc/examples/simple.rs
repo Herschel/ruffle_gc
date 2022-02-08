@@ -16,6 +16,8 @@ fn main() {
     }
 
     ctx.collect();
+
+    ctx.destroy();
 }
 
 #[derive(Gc, Clone, Copy)]

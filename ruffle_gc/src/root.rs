@@ -6,17 +6,14 @@ use std::{
 };
 
 #[repr(C)]
-pub struct GcRootData {
+pub struct GcRoot<T> {
     pub(crate) vtbl: GcVtbl,
     pub(crate) next: *mut GcRootData,
     pub(crate) prev: *mut GcRootData,
-}
-
-#[repr(C)]
-pub struct GcRoot<T: ?Sized> {
-    pub(crate) inner: GcRootData,
     pub(crate) value: UnsafeCell<T>,
 }
+
+pub type GcRootData = GcRoot<()>;
 
 impl<T> GcRoot<T> {
     pub unsafe fn new<'a>(value: T) -> GcRoot<T::Aged>
@@ -24,11 +21,9 @@ impl<T> GcRoot<T> {
         T: GcLifetime<'a> + Trace,
     {
         GcRoot {
-            inner: GcRootData {
-                vtbl: T::vtbl(),
-                next: ptr::null_mut(),
-                prev: ptr::null_mut(),
-            },
+            vtbl: T::vtbl(),
+            next: ptr::null_mut(),
+            prev: ptr::null_mut(),
             value: UnsafeCell::new(value.change_lifetime()),
         }
     }
@@ -39,17 +34,17 @@ impl<T> GcRoot<T> {
         T: Trace,
     {
         unsafe {
-            let ptr = &mut self.inner as *mut GcRootData;
+            let ptr = self as *mut GcRoot<_> as *mut GcRootData;
             GcContext::get().insert_root(ptr);
             &*self.value.get()
         }
     }
 }
 
-impl Drop for GcRootData {
+impl<T> Drop for GcRoot<T> {
     fn drop(&mut self) {
         unsafe {
-            GcContext::get().remove_root(self as *const GcRootData);
+            GcContext::get().remove_root(self as *mut GcRoot<_> as *const GcRootData);
         }
     }
 }
@@ -65,7 +60,7 @@ impl<T> GcHeapRoot<T> {
         unsafe {
             let root_data = GcRoot::new(value);
             let mut boxed = Box::new(root_data);
-            let ptr = &mut boxed.inner as *mut GcRootData;
+            let ptr = &mut *boxed as *mut GcRoot<_> as *mut GcRootData;
             GcContext::get().insert_root(ptr);
             GcHeapRoot(boxed)
         }

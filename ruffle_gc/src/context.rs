@@ -80,7 +80,9 @@ impl GcContext {
             // Mark
             let mut root = (*self.0).roots;
             while !root.is_null() {
-                ((*root).vtbl.trace)(&*(*(root as *mut GcRoot<()>)).value.get(), self);
+                let o = (*(root as *mut GcRoot<()>)).value.get();
+                //return;
+                ((*root).vtbl.trace)(o, self);
                 root = (*root).next;
             }
 
