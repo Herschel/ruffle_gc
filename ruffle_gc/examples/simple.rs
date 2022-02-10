@@ -1,7 +1,7 @@
-use ruffle_gc::{pin_root, Gc, GcContext};
+use ruffle_gc::{new_gc_context, pin_root, Gc, GcContext};
 
 fn main() {
-    let mut ctx = GcContext::new().unwrap();
+    new_gc_context!(ctx);
 
     {
         let object = Object::new(&mut ctx, "My Object".to_string(), 42);

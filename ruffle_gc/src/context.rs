@@ -10,7 +10,10 @@ thread_local! {
 }
 
 #[derive(Debug)]
-pub struct GcContext(*mut GcContextData);
+pub struct GcContext<'gc> {
+    ptr: *mut GcContextData,
+    _invariant: Invariant<'gc>,
+}
 
 pub(crate) struct GcContextData {
     roots: *mut GcRootData,
@@ -22,8 +25,8 @@ pub(crate) struct GcContextData {
 
 type Error = Box<dyn std::error::Error>;
 
-impl GcContext {
-    pub fn new() -> Result<Self, Error> {
+impl<'gc> GcContext<'gc> {
+    pub unsafe fn new(invariant: Invariant<'gc>) -> Result<Self, Error> {
         CONTEXT.with(|cell| {
             let data = GcContextData {
                 roots: std::ptr::null_mut(),
@@ -34,13 +37,19 @@ impl GcContext {
             };
             let ptr = Box::into_raw(Box::new(data));
             cell.set(ptr).map_err(|_| "GcContext already created")?;
-            Ok(Self(ptr))
+            Ok(Self {
+                ptr,
+                _invariant: invariant,
+            })
         })
     }
 
     pub(crate) fn get() -> Self {
         let ptr = CONTEXT.with(|cell| cell.get().unwrap().clone());
-        Self(ptr)
+        Self {
+            ptr,
+            _invariant: Default::default(),
+        }
     }
 
     pub fn allocate<'a, T>(&'a mut self, value: T) -> Gc<'a, T::Aged>
@@ -57,11 +66,11 @@ impl GcContext {
                 vtbl: T::vtbl(),
                 flags,
                 weak: None,
-                next: (*self.0).objects,
+                next: (*self.ptr).objects,
                 value: UnsafeCell::new(value),
             };
             let ptr = Box::into_raw(Box::new(gc_box)) as *mut GcData<()>;
-            (*self.0).objects = ptr as GcDataPtr;
+            (*self.ptr).objects = ptr as GcDataPtr;
             Gc {
                 ptr,
                 _phantom: PhantomData,
@@ -76,9 +85,9 @@ impl GcContext {
     /// the call.
     pub fn collect(&mut self) {
         unsafe {
-            println!("Collect {} start:", (*self.0).num_collects);
+            println!("Collect {} start:", (*self.ptr).num_collects);
             // Mark
-            let mut root = (*self.0).roots;
+            let mut root = (*self.ptr).roots;
             while !root.is_null() {
                 let o = (*(root as *mut GcRoot<()>)).value.get();
                 //return;
@@ -86,7 +95,7 @@ impl GcContext {
                 root = (*root).next;
             }
 
-            while let Some(object) = (*self.0).trace_queue.pop() {
+            while let Some(object) = (*self.ptr).trace_queue.pop() {
                 (*object).flags -= GcFlags::COLOR_MASK;
                 (*object).flags |= GcFlags::BLACK;
                 if (*object).flags.contains(GcFlags::NEEDS_TRACE) {
@@ -96,7 +105,7 @@ impl GcContext {
 
             // Sweep
             let mut prev: GcDataPtr = std::ptr::null_mut();
-            let mut object = (*self.0).objects;
+            let mut object = (*self.ptr).objects;
             while !object.is_null() {
                 let free = if ((*object).flags & GcFlags::COLOR_MASK) != GcFlags::WHITE {
                     (*object).flags -= GcFlags::COLOR_MASK;
@@ -106,7 +115,7 @@ impl GcContext {
                     if !prev.is_null() {
                         (*prev).next = (*object).next;
                     } else {
-                        (*self.0).objects = (*object).next;
+                        (*self.ptr).objects = (*object).next;
                     }
                     true
                 };
@@ -114,7 +123,7 @@ impl GcContext {
                 if free {
                     println!("Free {:?}", object);
                     if let Some(id) = (*object).weak {
-                        (*self.0).weaks.remove(id);
+                        (*self.ptr).weaks.remove(id);
                     }
                     ((*object).vtbl.dealloc)(object as *mut GcData<()> as *mut ());
                 } else {
@@ -123,8 +132,8 @@ impl GcContext {
                 object = next;
             }
 
-            println!("Collect {} end\n", (*self.0).num_collects);
-            (*self.0).num_collects += 1;
+            println!("Collect {} end\n", (*self.ptr).num_collects);
+            (*self.ptr).num_collects += 1;
         }
     }
 
@@ -137,12 +146,12 @@ impl GcContext {
     pub fn destroy(self) {
         unsafe {
             // Ensure that there are no remaining roots.
-            if !(*self.0).roots.is_null() {
+            if !(*self.ptr).roots.is_null() {
                 panic!("Roots still exist");
             }
 
             // Deallocate all remaining managed data.
-            let mut object = (*self.0).objects;
+            let mut object = (*self.ptr).objects;
             while !object.is_null() {
                 ((*object).vtbl.dealloc)(object as *mut GcData<()> as *mut ());
                 object = (*object).next;
@@ -158,7 +167,7 @@ impl GcContext {
 
     pub(crate) fn get_weak<'a, T>(&'a self, weak: GcWeak<'a, T>) -> Option<Gc<'a, T>> {
         unsafe {
-            (*self.0).weaks.get(weak.id).map(|&ptr| Gc {
+            (*self.ptr).weaks.get(weak.id).map(|&ptr| Gc {
                 ptr,
                 _phantom: Default::default(),
             })
@@ -167,18 +176,18 @@ impl GcContext {
 
     pub(crate) fn add_weak<'a, T>(&'a self, ptr: *mut GcData<T>) -> WeakId {
         unsafe {
-            let id = (*self.0).weaks.insert(ptr as *mut GcData<()>);
+            let id = (*self.ptr).weaks.insert(ptr as *mut GcData<()>);
             (*ptr).weak = Some(id);
             id
         }
     }
 
     pub(crate) unsafe fn insert_root(&mut self, root: *mut GcRootData) {
-        if !(*self.0).roots.is_null() {
-            (*(*self.0).roots).prev = root;
+        if !(*self.ptr).roots.is_null() {
+            (*(*self.ptr).roots).prev = root;
         }
-        (*root).next = (*self.0).roots;
-        (*self.0).roots = root;
+        (*root).next = (*self.ptr).roots;
+        (*self.ptr).roots = root;
     }
 
     pub(crate) unsafe fn remove_root(&mut self, root: *const GcRootData) {
@@ -188,7 +197,7 @@ impl GcContext {
         if !(*root).prev.is_null() {
             (*(*root).prev).next = (*root).next;
         } else {
-            (*self.0).roots = (*root).next;
+            (*self.ptr).roots = (*root).next;
         }
     }
 
@@ -199,7 +208,40 @@ impl GcContext {
         if (flags & GcFlags::COLOR_MASK) == GcFlags::WHITE {
             data.flags -= GcFlags::COLOR_MASK;
             data.flags |= GcFlags::GRAY;
-            (*self.0).trace_queue.push(ptr as *mut GcData<()>);
+            (*self.ptr).trace_queue.push(ptr as *mut GcData<()>);
         }
     }
+}
+
+pub type Invariant<'a> = PhantomData<*mut &'a mut ()>;
+
+#[macro_export]
+macro_rules! new_gc_context {
+    ($name:ident) => {
+        $crate::tagged!(tag, let mut $name = unsafe {
+			// this is not per-se unsafe but we need it to be public and
+			// calling it with a non-unique `tag` would allow arena mixups,
+			// which may introduce UB in `Index`/`IndexMut`
+			$crate::GcContext::new(tag).unwrap()
+		});
+    }
+}
+
+#[macro_export]
+macro_rules! tagged {
+    ($tag:ident, $stmt:stmt) => {
+        let $tag = $crate::Invariant::default();
+        let _guard;
+        $stmt;
+        // this doesn't make it to MIR, but ensures that borrowck will not
+        // unify the lifetimes of two macro calls by binding the lifetime to
+        // drop scope
+        if false {
+            struct Guard<'tag>(&'tag $crate::Invariant<'tag>);
+            impl<'tag> ::core::ops::Drop for Guard<'tag> {
+                fn drop(&mut self) {}
+            }
+            _guard = Guard(&$tag);
+        }
+    };
 }

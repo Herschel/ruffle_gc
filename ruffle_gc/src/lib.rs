@@ -5,7 +5,7 @@ mod root;
 mod trace;
 mod weak;
 
-pub use context::GcContext;
+pub use context::{GcContext, Invariant};
 pub use gc::{Gc, GcVtbl};
 pub use lifetime::GcLifetime;
 pub use root::{GcHeapRoot, GcRoot, GcRootData};
