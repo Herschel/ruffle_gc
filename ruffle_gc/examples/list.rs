@@ -1,7 +1,7 @@
-use ruffle_gc::{pin_root, Gc, GcContext, GcHeapRoot, Trace};
+use ruffle_gc::{new_gc_context, pin_root, Gc, GcContext, GcHeapRoot, Trace};
 
 fn main() {
-    let mut ctx = GcContext::new().unwrap();
+    new_gc_context!(ctx);
 
     let list: List<i32> = List::new(&mut ctx);
     let list = GcHeapRoot::new(list);
@@ -19,14 +19,14 @@ fn main() {
 }
 
 #[derive(Gc, Clone, Copy)]
-struct List<'a, T>(Gc<'a, ListData<'a, T>>);
+struct List<'a, 'gc, T>(Gc<'a, 'gc, ListData<'a, 'gc, T>>);
 
-impl<'a, T: Trace> List<'a, T> {
-    fn new(ctx: &'a mut GcContext) -> Self {
+impl<'a, 'gc, T: Trace> List<'a, 'gc, T> {
+    fn new(ctx: &'a mut GcContext<'gc>) -> Self {
         List(ctx.allocate(ListData { head: None }))
     }
 
-    fn push_front(self, ctx: &mut GcContext, value: T) {
+    fn push_front(self, ctx: &mut GcContext<'gc>, value: T) {
         let prev_head = self.0.borrow(ctx).head;
         pin_root!(prev_head);
         let new_head = Node(ctx.allocate(NodeData {
@@ -42,7 +42,7 @@ impl<'a, T: Trace> List<'a, T> {
         }
     }
 
-    fn pop_front(self, ctx: &mut GcContext) -> Option<T>
+    fn pop_front(self, ctx: &mut GcContext<'gc>) -> Option<T>
     where
         T: Clone,
     {
@@ -64,24 +64,24 @@ impl<'a, T: Trace> List<'a, T> {
 }
 
 #[derive(Gc)]
-struct ListData<'a, T> {
-    head: Option<Node<'a, T>>,
+struct ListData<'a, 'gc, T> {
+    head: Option<Node<'a, 'gc, T>>,
 }
 
 #[derive(Gc)]
-struct Node<'a, T>(Gc<'a, NodeData<'a, T>>);
+struct Node<'a, 'gc, T>(Gc<'a, 'gc, NodeData<'a, 'gc, T>>);
 
-impl<'a, T> Clone for Node<'a, T> {
+impl<'a, 'gc, T> Clone for Node<'a, 'gc, T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, T> Copy for Node<'a, T> {}
+impl<'a, 'gc, T> Copy for Node<'a, 'gc, T> {}
 
 #[derive(Gc)]
-struct NodeData<'a, T> {
+struct NodeData<'a, 'gc, T> {
     value: T,
-    next: Option<Node<'a, T>>,
-    prev: Option<Node<'a, T>>,
+    next: Option<Node<'a, 'gc, T>>,
+    prev: Option<Node<'a, 'gc, T>>,
 }

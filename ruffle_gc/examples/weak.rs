@@ -1,7 +1,7 @@
-use ruffle_gc::{pin_root, Gc, GcContext, GcHeapRoot, GcWeak};
+use ruffle_gc::{new_gc_context, pin_root, Gc, GcContext, GcHeapRoot, GcWeak};
 
 fn main() {
-    let mut ctx = GcContext::new().unwrap();
+    new_gc_context!(ctx);
     let object = GcHeapRoot::new(Object::new(&mut ctx, "Test"));
     {
         let object2 = Object::new(&mut ctx, "Weak");
@@ -24,10 +24,10 @@ fn main() {
 }
 
 #[derive(Clone, Copy, Gc)]
-struct Object<'a>(Gc<'a, ObjectData<'a>>);
+struct Object<'a, 'gc>(Gc<'a, 'gc, ObjectData<'a, 'gc>>);
 
-impl<'a> Object<'a> {
-    fn new(ctx: &'a mut GcContext, name: impl Into<String>) -> Self {
+impl<'a, 'gc> Object<'a, 'gc> {
+    fn new(ctx: &'a mut GcContext<'gc>, name: impl Into<String>) -> Self {
         Object(ctx.allocate(ObjectData {
             name: name.into(),
             next: None,
@@ -36,7 +36,7 @@ impl<'a> Object<'a> {
 }
 
 #[derive(Gc)]
-struct ObjectData<'a> {
+struct ObjectData<'a, 'gc> {
     name: String,
-    next: Option<GcWeak<'a, ObjectData<'a>>>,
+    next: Option<GcWeak<'a, 'gc, ObjectData<'a, 'gc>>>,
 }

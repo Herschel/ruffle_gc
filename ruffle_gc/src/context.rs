@@ -52,7 +52,7 @@ impl<'gc> GcContext<'gc> {
         }
     }
 
-    pub fn allocate<'a, T>(&'a mut self, value: T) -> Gc<'a, T::Aged>
+    pub fn allocate<'a, T>(&'a mut self, value: T) -> Gc<'a, 'gc, T::Aged>
     where
         T: GcLifetime<'a> + Trace,
     {
@@ -73,6 +73,7 @@ impl<'gc> GcContext<'gc> {
             (*self.ptr).objects = ptr as GcDataPtr;
             Gc {
                 ptr,
+                _invariant: self._invariant,
                 _phantom: PhantomData,
             }
         }
@@ -165,10 +166,11 @@ impl<'gc> GcContext<'gc> {
         }
     }
 
-    pub(crate) fn get_weak<'a, T>(&'a self, weak: GcWeak<'a, T>) -> Option<Gc<'a, T>> {
+    pub(crate) fn get_weak<'a, T>(&'a self, weak: GcWeak<'a, 'gc, T>) -> Option<Gc<'a, 'gc, T>> {
         unsafe {
             (*self.ptr).weaks.get(weak.id).map(|&ptr| Gc {
                 ptr,
+                _invariant: self._invariant,
                 _phantom: Default::default(),
             })
         }

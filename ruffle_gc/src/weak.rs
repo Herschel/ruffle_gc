@@ -1,4 +1,4 @@
-use crate::{Gc, GcContext, GcData, GcLifetime, Trace};
+use crate::{Gc, GcContext, GcData, GcLifetime, Invariant, Trace};
 use std::marker::PhantomData;
 
 /// A weak pointer to memory managed by the garbage collector.
@@ -7,20 +7,21 @@ use std::marker::PhantomData;
 /// attempting to borrow the data via `borrow` or `upgrade` may return `None` if the data
 /// has been collecting.
 #[repr(transparent)]
-pub struct GcWeak<'a, T> {
+pub struct GcWeak<'a, 'gc, T> {
     pub(crate) id: WeakId,
+    pub(crate) _invariant: Invariant<'gc>,
     pub(crate) _phantom: PhantomData<&'a T>,
 }
 
 pub(crate) type WeakId = generational_arena::Index;
 
-impl<'a, T> GcWeak<'a, T> {
+impl<'a, 'gc, T> GcWeak<'a, 'gc, T> {
     /// Attempts to upgrade the weak pointer to a `Gc`.
     ///
     /// This requires immutable to the `GcContext` to ensure that the inner value does not get
     /// collected while the `Gc` pointer is not rooted. Returns `None` if the inner value has
     /// already been collected.
-    pub fn upgrade(self, ctx: &'a GcContext) -> Option<Gc<'a, T>> {
+    pub fn upgrade(self, ctx: &'a GcContext<'gc>) -> Option<Gc<'a, 'gc, T>> {
         ctx.get_weak(self)
     }
 
@@ -29,7 +30,7 @@ impl<'a, T> GcWeak<'a, T> {
     /// This requires immutable to the `GcContext` to ensure that the inner value does not get
     /// collected until the borrow is complete. Returns `None` if the inner value has already been
     /// collected.
-    pub fn borrow<'b>(self, ctx: &'b GcContext) -> Option<&'b T::Aged>
+    pub fn borrow<'b>(self, ctx: &'b GcContext<'gc>) -> Option<&'b T::Aged>
     where
         T: GcLifetime<'b>,
         'a: 'b,
@@ -42,7 +43,7 @@ impl<'a, T> GcWeak<'a, T> {
     /// This requires mutable to the `GcContext` to ensure that no other managed data can be
     /// mutated until the borrow is complete. Returns `None` if the inner value has already been
     /// collected.
-    pub fn borrow_mut<'b>(self, ctx: &'b mut GcContext) -> Option<&'b mut T::Aged>
+    pub fn borrow_mut<'b>(self, ctx: &'b mut GcContext<'gc>) -> Option<&'b mut T::Aged>
     where
         T: GcLifetime<'b>,
         'a: 'b,
@@ -52,22 +53,22 @@ impl<'a, T> GcWeak<'a, T> {
     }
 }
 
-impl<'a, T> Clone for GcWeak<'a, T> {
+impl<'a, 'gc, T> Clone for GcWeak<'a, 'gc, T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, T> Copy for GcWeak<'a, T> {}
+impl<'a, 'gc, T> Copy for GcWeak<'a, 'gc, T> {}
 
-unsafe impl<'a, 'b, T> GcLifetime<'a> for GcWeak<'b, T>
+unsafe impl<'a, 'b, 'gc, T> GcLifetime<'a> for GcWeak<'b, 'gc, T>
 where
     T: 'a + GcLifetime<'a>,
 {
-    type Aged = GcWeak<'a, T::Aged>;
+    type Aged = GcWeak<'a, 'gc, T::Aged>;
 }
 
-unsafe impl<'a, T> Trace for GcWeak<'a, T> {
+unsafe impl<'a, 'gc, T> Trace for GcWeak<'a, 'gc, T> {
     unsafe fn trace(&self, _ctx: &mut GcContext) {
         // Noop; weak pointers don't keep other managed data alive.
     }

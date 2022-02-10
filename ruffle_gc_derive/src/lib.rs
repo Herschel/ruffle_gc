@@ -146,7 +146,7 @@ fn lifetime(input: &syn::DeriveInput) -> proc_macro2::TokenStream {
             }
         };
         return out.into();
-    } else if num_lifetimes > 1 {
+    } else if num_lifetimes > 2 {
         panic!("Don't know how to deal with multiple lifetimes")
     }
 
@@ -159,10 +159,18 @@ fn lifetime(input: &syn::DeriveInput) -> proc_macro2::TokenStream {
         let ty = &param.ident;
         where_clause.predicates.push(parse_quote! { #ty: '_lt  });
     }
+    if num_lifetimes >= 2 {
+        where_clause.predicates.push(parse_quote! { 'gc: '_lt  });
+    }
 
     let mut aged_generics = input.generics.clone();
-    if let Some(lifetime) = aged_generics.lifetimes_mut().next() {
+    if let Some(lifetime) = aged_generics
+        .lifetimes_mut()
+        .find(|lt| lt.lifetime.ident != "gc")
+    {
         lifetime.lifetime.ident = parse_quote! { _lt };
+    } else {
+        panic!("Non-gc lifetime not found");
     }
 
     let (impl_generics, _, where_clause) = generics.split_for_impl();

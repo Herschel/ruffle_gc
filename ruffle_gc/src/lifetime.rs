@@ -105,11 +105,11 @@ unsafe impl GcLifetime<'_> for () {
     type Aged = ();
 }
 
-unsafe impl<'a, 'b, T> GcLifetime<'a> for Gc<'b, T>
+unsafe impl<'a, 'b, 'gc, T> GcLifetime<'a> for Gc<'b, 'gc, T>
 where
     T: GcLifetime<'a> + 'a,
 {
-    type Aged = Gc<'a, T::Aged>;
+    type Aged = Gc<'a, 'gc, T::Aged>;
 }
 
 unsafe impl<'a, T> GcLifetime<'a> for Option<T>

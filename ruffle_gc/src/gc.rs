@@ -1,4 +1,4 @@
-use crate::{GcContext, GcLifetime, GcWeak, Trace, WeakId};
+use crate::{GcContext, GcLifetime, GcWeak, Invariant, Trace, WeakId};
 use bitflags::bitflags;
 use std::{
     cell::UnsafeCell,
@@ -8,20 +8,21 @@ use std::{
 
 /// A pointer to garbage-collected memory.
 #[repr(transparent)]
-pub struct Gc<'a, T> {
+pub struct Gc<'a, 'gc, T> {
     pub(crate) ptr: GcDataPtr,
+    pub(crate) _invariant: Invariant<'gc>,
     pub(crate) _phantom: PhantomData<&'a T>,
 }
 
-impl<'a, T> Clone for Gc<'a, T> {
+impl<'a, 'gc, T> Clone for Gc<'a, 'gc, T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, T> Copy for Gc<'a, T> {}
+impl<'a, 'gc, T> Copy for Gc<'a, 'gc, T> {}
 
-impl<'a, T> Gc<'a, T> {
+impl<'a, 'gc, T> Gc<'a, 'gc, T> {
     pub fn get<'b>(self, _: &'b GcContext) -> T::Aged
     where
         T: GcLifetime<'b>,
@@ -55,7 +56,7 @@ impl<'a, T> Gc<'a, T> {
         unsafe { &mut *(*(self.ptr as *mut GcData<T::Aged>)).value.get() }
     }
 
-    pub fn downgrade(self, ctx: &GcContext) -> GcWeak<'a, T> {
+    pub fn downgrade(self, ctx: &GcContext) -> GcWeak<'a, 'gc, T> {
         let weak = unsafe { (*self.ptr).weak };
         let id = if let Some(id) = weak {
             id
@@ -64,6 +65,7 @@ impl<'a, T> Gc<'a, T> {
         };
         GcWeak {
             id,
+            _invariant: self._invariant,
             _phantom: Default::default(),
         }
     }
@@ -79,7 +81,7 @@ impl<'a, T> Gc<'a, T> {
     }
 }
 
-impl<'a, T> Debug for Gc<'a, T> {
+impl<'a, 'gc, T> Debug for Gc<'a, 'gc, T> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("Gc")
             .field("ptr", unsafe { &(*self.ptr).value })
@@ -87,7 +89,7 @@ impl<'a, T> Debug for Gc<'a, T> {
     }
 }
 
-unsafe impl<'a, T: Trace> Trace for Gc<'a, T> {
+unsafe impl<'a, 'gc, T: Trace> Trace for Gc<'a, 'gc, T> {
     unsafe fn trace(&self, ctx: &mut GcContext) {
         ctx.trace(self.ptr);
     }

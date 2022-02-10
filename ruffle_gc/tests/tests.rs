@@ -1,8 +1,8 @@
-use ruffle_gc::{GcContext, GcHeapRoot};
+use ruffle_gc::{new_gc_context, GcHeapRoot};
 
 #[test]
 fn test_gc() {
-    let mut ctx = GcContext::new().unwrap();
+    new_gc_context!(ctx);
     let object = GcHeapRoot::new(ctx.allocate("Test".to_string()));
     ctx.collect();
     assert_eq!(*object.borrow(&ctx), "Test");

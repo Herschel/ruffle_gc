@@ -1,7 +1,7 @@
-use ruffle_gc::{pin_root, Gc, GcContext, GcHeapRoot};
+use ruffle_gc::{new_gc_context, pin_root, Gc, GcContext, GcHeapRoot};
 
 fn main() {
-    let mut ctx = GcContext::new().unwrap();
+    new_gc_context!(ctx);
 
     let root = GcHeapRoot::new(Node::new(&mut ctx));
 
@@ -24,19 +24,19 @@ fn main() {
 }
 
 #[derive(Gc, Clone, Copy)]
-struct Node<'a>(Gc<'a, NodeData<'a>>);
+struct Node<'a, 'gc>(Gc<'a, 'gc, NodeData<'a, 'gc>>);
 
 #[derive(Gc)]
-pub struct NodeData<'a> {
-    other: Option<Node<'a>>,
+pub struct NodeData<'a, 'gc> {
+    other: Option<Node<'a, 'gc>>,
 }
 
-impl<'a> Node<'a> {
-    fn new(ctx: &'a mut GcContext) -> Self {
+impl<'a, 'gc> Node<'a, 'gc> {
+    fn new(ctx: &'a mut GcContext<'gc>) -> Self {
         Self(ctx.allocate(NodeData { other: None }))
     }
 
-    fn set_next(self, ctx: &'a mut GcContext, other: Option<Node<'a>>) {
+    fn set_next(self, ctx: &'a mut GcContext<'gc>, other: Option<Node<'a, 'gc>>) {
         self.0.borrow_mut(ctx).other = other;
     }
 }

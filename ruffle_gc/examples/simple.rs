@@ -21,7 +21,7 @@ fn main() {
 }
 
 #[derive(Gc, Clone, Copy)]
-struct Object<'a>(Gc<'a, ObjectData>);
+struct Object<'a, 'gc>(Gc<'a, 'gc, ObjectData>);
 
 #[derive(Gc)]
 pub struct ObjectData {
@@ -29,8 +29,8 @@ pub struct ObjectData {
     num: i32,
 }
 
-impl<'a> Object<'a> {
-    fn new(ctx: &'a mut GcContext, name: String, num: i32) -> Self {
+impl<'a, 'gc> Object<'a, 'gc> {
+    fn new(ctx: &'a mut GcContext<'gc>, name: String, num: i32) -> Self {
         let data = ObjectData { name, num };
         Self(ctx.allocate(data))
     }
